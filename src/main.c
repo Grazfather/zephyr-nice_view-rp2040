@@ -4,8 +4,8 @@
 LOG_MODULE_REGISTER(main);
 
 #include <zephyr/kernel.h>
-#include <zephyr/drivers/led_strip.h>
 #include <zephyr/device.h>
+#include <zephyr/drivers/led_strip.h>
 
 #if DT_NODE_HAS_PROP(DT_ALIAS(led_strip), chain_length)
 #define STRIP_NUM_PIXELS DT_PROP(DT_ALIAS(led_strip), chain_length)
@@ -26,18 +26,10 @@ static const struct led_rgb colors[] = {
 static struct led_rgb pixels[STRIP_NUM_PIXELS];
 static const struct device *const strip = DEVICE_DT_GET(DT_ALIAS(led_strip));
 
-int main(void)
+static void led_thread_fn(void *a, void *b, void *c)
 {
 	size_t color = 0;
 	int rc;
-
-	if (device_is_ready(strip)) {
-		LOG_INF("Found LED device %s", strip->name);
-	} else {
-		LOG_ERR("LED device %s is not ready", strip->name);
-		return 0;
-	}
-
 	while (1) {
 		for (size_t cursor = 0; cursor < ARRAY_SIZE(pixels); cursor++) {
 			memset(&pixels, 0, sizeof(pixels));
@@ -51,6 +43,29 @@ int main(void)
 			k_sleep(DELAY_TIME);
 		}
 		color = (color + 1) & ARRAY_SIZE(colors);
+	}
+}
+K_THREAD_STACK_DEFINE(led_thread_stack, 256);
+struct k_thread led_thread;
+
+int main(void)
+{
+	if (device_is_ready(strip)) {
+		LOG_INF("Found LED device %s", strip->name);
+	} else {
+		LOG_ERR("LED device %s is not ready", strip->name);
+		return 0;
+	}
+
+	k_tid_t led_tid = k_thread_create(&led_thread,
+			led_thread_stack,
+			K_THREAD_STACK_SIZEOF(led_thread_stack),
+			led_thread_fn,
+			NULL, NULL, NULL,
+			3, 0, K_NO_WAIT);
+
+	while (1) {
+		k_sleep(K_MSEC(20000));
 	}
 
 	return 0;
